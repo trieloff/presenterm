@@ -37,6 +37,7 @@ unicode-width = "0.2"
 os_pipe = "1.1.5"
 libc = "0.2"
 vte = "0.15"
+figlet-rs = "0.1.5"
 
 [dev-dependencies]
 rstest = { version = "0.25", default-features = false }
