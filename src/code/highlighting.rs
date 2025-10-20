@@ -105,6 +105,7 @@ impl SnippetHighlighter {
         match language {
             Ada => "adb",
             Asp => "asa",
+            Asciinema => "txt",
             Awk => "awk",
             Ascii => "txt",
             Banner { .. } => "txt",

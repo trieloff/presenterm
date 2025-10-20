@@ -557,6 +557,7 @@ impl Snippet {
 pub enum SnippetLanguage {
     Ada,
     Asp,
+    Asciinema,
     Awk,
     Ascii,
     Banner { font: String },
@@ -643,6 +644,7 @@ impl FromStr for SnippetLanguage {
 
         let language = match lower.as_str() {
             "ascii" => Ascii,
+            "asciinema" | "cast" => Asciinema,
             "ada" => Ada,
             "asp" => Asp,
             "awk" => Awk,
