@@ -1,8 +1,21 @@
 presenterm
 ===
 
-[![crates-badge]][crates-package] [![brew-badge]][brew-package] [![nix-badge]][nix-package] 
+[![crates-badge]][crates-package] [![brew-badge]][brew-package] [![nix-badge]][nix-package]
 [![arch-badge]][arch-package] [![scoop-badge]][scoop-package] [![winget-badge]][winget-package]
+
+> [!NOTE]
+> **This is a personal fork** with experimental ASCII art and banner features. See the [original presenterm repository](https://github.com/mfontanini/presenterm) for the official version.
+>
+> ### New Features in This Fork:
+>
+> - **ASCII Art Blocks**: Use ` ```ascii ` for plain ASCII art with optional animations
+> - **FIGlet Banners**: Use ` ```banner:fontname ` to create text banners in 149+ different fonts
+> - **17 Animation Styles**: rainbow, matrix, wave, plasma, fire, glitch, kaleidoscope, and more
+> - **Animation Control**: `+animate:style`, `+loop`, `+once`, `+static` attributes
+> - **Plain Defaults**: Banners render in monochrome by default—add color selectively with `+animate:rainbow`
+>
+> **See it in action**: Check out [demo.mp4](./demo.mp4) for a quick demonstration of the banner and ASCII art features.
 
 [brew-badge]: https://img.shields.io/homebrew/v/presenterm
 [brew-package]: https://formulae.brew.sh/formula/presenterm
