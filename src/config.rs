@@ -246,6 +246,10 @@ pub struct SnippetConfig {
     /// Whether to validate snippets.
     #[serde(default)]
     pub validate: bool,
+
+    /// Banner specific configuration
+    #[serde(default)]
+    pub banner: BannerConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -287,6 +291,27 @@ impl Default for SnippetRenderConfig {
 
 pub(crate) fn default_snippet_render_threads() -> usize {
     2
+}
+
+/// Banner-specific configuration.
+#[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct BannerConfig {
+    /// Duration in milliseconds for a full rainbow animation cycle.
+    /// Applies to both +once (single cycle) and +loop (repeats).
+    #[serde(default = "default_banner_animation_duration_millis")]
+    pub animation_duration_millis: u16,
+}
+
+impl Default for BannerConfig {
+    fn default() -> Self {
+        Self { animation_duration_millis: default_banner_animation_duration_millis() }
+    }
+}
+
+pub(crate) fn default_banner_animation_duration_millis() -> u16 {
+    1000
 }
 
 #[derive(Clone, Debug, Deserialize)]

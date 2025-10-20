@@ -94,6 +94,8 @@ pub struct PresentationBuilderOptions {
     pub validate_snippets: bool,
     pub layout_grid: bool,
     pub h1_slide_titles: bool,
+    // Duration of a full rainbow banner animation cycle in milliseconds
+    pub banner_animation_duration_millis: u16,
 }
 
 impl PresentationBuilderOptions {
@@ -143,6 +145,7 @@ impl Default for PresentationBuilderOptions {
             validate_snippets: false,
             layout_grid: false,
             h1_slide_titles: false,
+            banner_animation_duration_millis: 1000,
         }
     }
 }

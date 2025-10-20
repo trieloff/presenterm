@@ -356,7 +356,23 @@ impl<'a> Presenter<'a> {
                 panic!("unreachable commands")
             }
         };
-        if needs_redraw { CommandSideEffect::Redraw } else { CommandSideEffect::None }
+        if needs_redraw {
+            // Starting any on-demand async renders in the current visible slide ensures
+            // animations that should play once do so on first view without extra input.
+            let slide = self.state.presentation().current_slide_index();
+            let pollables = {
+                let presentation = self.state.presentation_mut();
+                Self::trigger_slide_async_renders(presentation)
+            };
+            if !pollables.is_empty() {
+                for pollable in pollables {
+                    self.poller.send(PollerCommand::Poll { pollable, slide });
+                }
+            }
+            CommandSideEffect::Redraw
+        } else {
+            CommandSideEffect::None
+        }
     }
 
     fn try_reload(&mut self, path: &Path, force: bool) -> RenderResult {
@@ -376,6 +392,15 @@ impl<'a> Presenter<'a> {
                     presentation.jump_chunk(current.current_chunk());
                 }
                 self.start_automatic_async_renders(&mut presentation);
+                // Also start on-demand async renders for the current slide so one-shot
+                // animations (e.g., banner +once) play automatically when shown.
+                let pollables = Self::trigger_slide_async_renders(&mut presentation);
+                if !pollables.is_empty() {
+                    let slide = presentation.current_slide_index();
+                    for pollable in pollables {
+                        self.poller.send(PollerCommand::Poll { pollable, slide });
+                    }
+                }
                 self.state = self.validate_overflows(presentation);
                 self.try_scale_transition_images()?;
             }
@@ -492,7 +517,17 @@ impl<'a> Presenter<'a> {
         presentation.jump_next();
         let right = Self::virtual_render(presentation.current_slide(), dimensions, &options)?;
         let direction = TransitionDirection::Next;
-        self.animate_transition(drawer, left, right, direction, dimensions, config)
+        let result = self.animate_transition(drawer, left, right, direction, dimensions, config);
+        // After transitioning into the new slide, start any on-demand async renders
+        // (e.g., banner animations that should play once when shown).
+        let pollables = Self::trigger_slide_async_renders(self.state.presentation_mut());
+        if !pollables.is_empty() {
+            let slide = self.state.presentation().current_slide_index();
+            for pollable in pollables {
+                self.poller.send(PollerCommand::Poll { pollable, slide });
+            }
+        }
+        result
     }
 
     fn animate_previous_slide(&mut self, drawer: &mut TerminalDrawer) -> RenderResult {
@@ -512,7 +547,17 @@ impl<'a> Presenter<'a> {
         presentation.jump_previous();
         let left = Self::virtual_render(presentation.current_slide(), dimensions, &options)?;
         let direction = TransitionDirection::Previous;
-        self.animate_transition(drawer, left, right, direction, dimensions, config)
+        let result = self.animate_transition(drawer, left, right, direction, dimensions, config);
+        // After transitioning into the new slide, start any on-demand async renders
+        // (e.g., banner animations that should play once when shown).
+        let pollables = Self::trigger_slide_async_renders(self.state.presentation_mut());
+        if !pollables.is_empty() {
+            let slide = self.state.presentation().current_slide_index();
+            for pollable in pollables {
+                self.poller.send(PollerCommand::Poll { pollable, slide });
+            }
+        }
+        result
     }
 
     fn animate_transition(

@@ -49,6 +49,12 @@ snippet:
     # the number of threads to use when rendering `+render` code snippets.
     threads: 2
 
+  # banner-specific configuration
+  banner:
+    # duration of a full rainbow animation cycle in milliseconds.
+    # used by +once (single cycle) and +loop (repeats)
+    animation_duration_millis: 1000
+
 speaker_notes:
   # The endpoint to listen for speaker note events.
   listen_address: "127.0.0.1:59418"

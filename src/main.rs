@@ -1,5 +1,10 @@
 use crate::{
-    code::{execute::SnippetExecutor, highlighting::HighlightThemeSet},
+    code::{
+        banner::{init_figlet_fonts_and_warn, BannerGenerator},
+        execute::SnippetExecutor,
+        highlighting::HighlightThemeSet,
+        snippet::{SnippetLanguage, SnippetParser},
+    },
     commands::listener::CommandListener,
     config::{Config, ImageProtocol, ValidateOverflows},
     demo::ThemesDemo,
@@ -8,6 +13,7 @@ use crate::{
     presentation::builder::{CommentCommand, PresentationBuilderOptions, Themes},
     presenter::{PresentMode, Presenter, PresenterOptions},
     resource::Resources,
+    markdown::elements::MarkdownElement,
     terminal::{
         GraphicsMode,
         image::printer::{ImagePrinter, ImageRegistry},
@@ -107,6 +113,10 @@ struct Cli {
     /// Display acknowledgements.
     #[clap(long, group = "target")]
     acknowledgements: bool,
+
+    /// Validate requested FIGlet fonts in the presentation and exit (no rendering).
+    #[clap(long)]
+    validate_fonts: bool,
 
     /// The image protocol to use.
     #[clap(long)]
@@ -299,6 +309,7 @@ impl CoreComponents {
             validate_snippets: config.snippet.validate,
             layout_grid: false,
             h1_slide_titles: options.h1_slide_titles.unwrap_or_default(),
+            banner_animation_duration_millis: config.snippet.banner.animation_duration_millis,
         }
     }
 
@@ -417,8 +428,49 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         present_mode,
         graphics_mode,
     } = CoreComponents::new(&cli, &path)?;
+
+    // Initialize and report on available FIGlet fonts once at startup
+    init_figlet_fonts_and_warn();
     let arena = Arena::new();
     let parser = MarkdownParser::new(&arena);
+
+    // Pre-validate requested banner fonts in the presentation; disallow fallback.
+    let mut invalid_fonts: Vec<String> = Vec::new();
+    if let Ok(contents) = std::fs::read_to_string(&path) {
+        if let Ok(elements) = parser.parse(&contents) {
+            use std::collections::BTreeSet;
+            let mut requested: BTreeSet<String> = BTreeSet::new();
+            for el in &elements {
+                if let MarkdownElement::Snippet { info, code, .. } = el {
+                    if let Ok(snippet) = SnippetParser::parse(info.clone(), code.clone()) {
+                        if let SnippetLanguage::Banner { font } = snippet.language {
+                            if font.to_lowercase() != "standard" {
+                                requested.insert(font);
+                            }
+                        }
+                    }
+                }
+            }
+            for font in requested {
+                if let Err(e) = BannerGenerator::new(&font) {
+                    invalid_fonts.push(format!("{font} ({e})"));
+                }
+            }
+        }
+    }
+
+    if !invalid_fonts.is_empty() {
+        let msg = format!(
+            "invalid or unavailable figlet font(s) requested: {}\nplease install or fix these fonts, or change the slides to use available fonts",
+            invalid_fonts.join(", ")
+        );
+        Cli::command().error(ErrorKind::InvalidValue, msg).exit();
+    }
+
+    if cli.validate_fonts {
+        println!("All requested FIGlet fonts are valid.");
+        return Ok(());
+    }
     let validate_overflows =
         overflow_validation_enabled(&present_mode, &config.defaults.validate_overflows) || cli.validate_overflows;
     if cli.validate_snippets {
