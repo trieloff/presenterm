@@ -1,11 +1,12 @@
 use super::{BuildError, BuildResult};
 use crate::{
     code::{
+        banner::{BannerGenerator, MultiBannerContext, MultiBannerLine, MultiBannerLineStatic, MultiBannerMutator, RainbowBannerAnimation},
         execute::LanguageSnippetExecutor,
         snippet::{
-            ExternalFile, Highlight, HighlightContext, HighlightGroup, HighlightMutator, HighlightedLine, Snippet,
-            SnippetExec, SnippetExecutorSpec, SnippetLanguage, SnippetLine, SnippetParser, SnippetRepr,
-            SnippetSplitter,
+            BannerAnimation, BannerAnimationStyle, ExternalFile, Highlight, HighlightContext, HighlightGroup, HighlightMutator,
+            HighlightedLine, Snippet, SnippetExec, SnippetExecutorSpec, SnippetLanguage, SnippetLine, SnippetParser,
+            SnippetRepr, SnippetSplitter,
         },
     },
     markdown::elements::SourcePosition,
@@ -32,6 +33,16 @@ impl PresentationBuilder<'_, '_> {
             .map_err(|e| self.invalid_presentation(source_position, InvalidPresentation::Snippet(e.to_string())))?;
         if matches!(snippet.language, SnippetLanguage::File) {
             snippet = self.load_external_snippet(snippet, source_position)?;
+        }
+        match snippet.language {
+            SnippetLanguage::Banner { ref font } => {
+                let font = font.clone();
+                return self.push_banner(snippet, &font, source_position);
+            }
+            SnippetLanguage::Ascii => {
+                return self.push_ascii(snippet, source_position);
+            }
+            _ => {}
         }
         if self.options.auto_render_languages.contains(&snippet.language) {
             snippet.attributes.representation = SnippetRepr::Render;
@@ -261,6 +272,217 @@ impl PresentationBuilder<'_, '_> {
             style.background = false;
         }
         style
+    }
+
+    fn push_banner(&mut self, snippet: Snippet, font: &str, source_position: SourcePosition) -> BuildResult {
+        use crate::markdown::text::{WeightedLine, WeightedText};
+        use crate::markdown::elements::Text;
+        use crate::markdown::text_style::TextStyle;
+        use crate::render::operation::BlockLine;
+        use std::rc::Rc;
+
+        // Generate ASCII art using the banner generator
+        let generator = BannerGenerator::new(font)
+            .map_err(|e| self.invalid_presentation(source_position, InvalidPresentation::Snippet(e.to_string())))?;
+
+        // Split content into lines - each line becomes a separate banner word
+        let lines: Vec<String> = snippet.contents.lines().map(|s| s.to_string()).collect();
+
+        // Get style settings
+        let _style = self.code_style(&snippet);
+        let font_size = self.slide_font_size();
+
+        // Banners are centered by default
+        let alignment = Alignment::Center {
+            minimum_margin: Default::default(),
+            minimum_size: 0,
+        };
+        let duration = self.options.banner_animation_duration_millis as u64;
+
+        // For multi-line banners, create all animations and use a mutator to cycle through them
+        if lines.len() > 1 {
+            use std::sync::{Arc, Mutex};
+
+            let (style, loop_animation) = match &snippet.attributes.animation {
+                BannerAnimation::None => (BannerAnimationStyle::Rainbow, false), // Used for animated case only
+                BannerAnimation::Animated { style, loop_animation } => (style.clone(), *loop_animation),
+            };
+
+            // Create context to track which banner line is currently displayed
+            let context = Arc::new(Mutex::new(MultiBannerContext {
+                current: 0,
+                total: lines.len(),
+            }));
+
+            match &snippet.attributes.animation {
+                BannerAnimation::None => {
+                    // Static: pre-generate all banners and render without animation
+                    let mut banners: Vec<Vec<String>> = Vec::new();
+                    let mut lengths: Vec<u16> = Vec::new();
+                    for line in lines.iter() {
+                        let ascii_art = generator.generate(line)
+                            .map_err(|e| self.invalid_presentation(source_position, InvalidPresentation::Snippet(e.to_string())))?;
+                        let ascii_lines: Vec<String> = ascii_art.lines().map(|s| s.to_string()).collect();
+
+                        let max_width = ascii_lines.iter().map(|l| l.len()).max().unwrap_or(0);
+                        let block_length = alignment.adjust_size((max_width * font_size as usize) as u16);
+                        banners.push(ascii_lines);
+                        lengths.push(block_length);
+                    }
+
+                    let multi_banner = MultiBannerLineStatic::new(banners, lengths, alignment, font_size, context.clone());
+                    self.chunk_operations.push(RenderOperation::RenderDynamic(Rc::new(multi_banner)));
+                }
+                BannerAnimation::Animated { .. } => {
+                    // Animated: generate animations for all banner lines
+                    let mut animations = Vec::new();
+                    for line in lines.iter() {
+                        let ascii_art = generator.generate(line)
+                            .map_err(|e| self.invalid_presentation(source_position, InvalidPresentation::Snippet(e.to_string())))?;
+                        let ascii_lines: Vec<String> = ascii_art.lines().map(|s| s.to_string()).collect();
+
+                        let max_width = ascii_lines.iter().map(|l| l.len()).max().unwrap_or(0);
+                        let block_length = alignment.adjust_size((max_width * font_size as usize) as u16);
+
+                        let animation = RainbowBannerAnimation::new(
+                            ascii_lines,
+                            block_length,
+                            alignment,
+                            font_size,
+                            style.clone(),
+                            loop_animation,
+                            duration,
+                        );
+                        animations.push(animation);
+                    }
+
+                    // Create MultiBannerLine that renders the current word based on context
+                    let multi_banner = MultiBannerLine::new(animations, context.clone());
+                    self.chunk_operations.push(RenderOperation::RenderAsync(Rc::new(multi_banner)));
+                }
+            }
+
+            // Add mutator to handle cycling through banner words
+            if self.options.allow_mutations {
+                self.chunk_mutators.push(Box::new(MultiBannerMutator::new(context)));
+            }
+        } else {
+            // Single line banner - use the original simple approach
+            let line = lines.first().unwrap_or(&String::new()).clone();
+
+            // Generate ASCII art for this line
+            let ascii_art = generator.generate(&line)
+                .map_err(|e| self.invalid_presentation(source_position, InvalidPresentation::Snippet(e.to_string())))?;
+            let ascii_lines: Vec<String> = ascii_art.lines().map(|s| s.to_string()).collect();
+
+            // Calculate block length for this banner
+            let max_width = ascii_lines.iter()
+                .map(|line| line.len())
+                .max()
+                .unwrap_or(0);
+            let block_length = (max_width * font_size as usize) as u16;
+            let block_length = alignment.adjust_size(block_length);
+
+            // Render based on animation mode
+            match &snippet.attributes.animation {
+                BannerAnimation::None => {
+                    // Static plain rendering - no colors, just use theme defaults
+                    let text_style = TextStyle::default().size(font_size);
+
+                    for ascii_line in &ascii_lines {
+                        let text = Text::new(ascii_line, text_style);
+                        let weighted_line = WeightedLine::from(vec![text]);
+                        let operation = RenderOperation::RenderBlockLine(BlockLine {
+                            prefix: WeightedText::from(""),
+                            right_padding_length: 0,
+                            repeat_prefix_on_wrap: false,
+                            text: weighted_line,
+                            block_length,
+                            alignment,
+                            block_color: None,
+                        });
+                        self.chunk_operations.push(operation);
+                        self.chunk_operations.push(RenderOperation::RenderLineBreak);
+                    }
+                }
+                BannerAnimation::Animated { style, loop_animation } => {
+                    // Animated banner
+                    let animation = RainbowBannerAnimation::new(
+                        ascii_lines,
+                        block_length,
+                        alignment,
+                        font_size,
+                        style.clone(),
+                        *loop_animation,
+                        duration,
+                    );
+                    self.chunk_operations.push(RenderOperation::RenderAsync(Rc::new(animation)));
+                }
+            }
+        }
+
+        self.chunk_operations.push(RenderOperation::SetColors(self.theme.default_style.style.colors));
+        Ok(())
+    }
+
+    fn push_ascii(&mut self, snippet: Snippet, _source_position: SourcePosition) -> BuildResult {
+        use crate::markdown::text::{WeightedLine, WeightedText};
+        use crate::markdown::elements::Text;
+        use crate::markdown::text_style::TextStyle;
+        use crate::render::operation::BlockLine;
+        use std::rc::Rc;
+
+        // Take the input verbatim as lines
+        let ascii_lines: Vec<String> = snippet.contents.lines().map(|s| s.to_string()).collect();
+
+        // Style and sizing
+        let font_size = self.slide_font_size();
+        let alignment = Alignment::Center { minimum_margin: Default::default(), minimum_size: 0 };
+
+        // Compute block length based on the widest line
+        let max_width = ascii_lines.iter().map(|line| line.len()).max().unwrap_or(0);
+        let mut block_length = (max_width * font_size as usize) as u16;
+        block_length = alignment.adjust_size(block_length);
+
+        let duration = self.options.banner_animation_duration_millis as u64;
+
+        match &snippet.attributes.animation {
+            // Static plain rendering (no animation, no rainbow) - just use theme defaults
+            BannerAnimation::None => {
+                let text_style = TextStyle::default().size(font_size);
+                for line in ascii_lines.iter() {
+                    let text = Text::new(line, text_style);
+                    let weighted_line = WeightedLine::from(vec![text]);
+                    let operation = RenderOperation::RenderBlockLine(BlockLine {
+                        prefix: WeightedText::from(""),
+                        right_padding_length: 0,
+                        repeat_prefix_on_wrap: false,
+                        text: weighted_line,
+                        block_length,
+                        alignment,
+                        block_color: None,
+                    });
+                    self.chunk_operations.push(operation);
+                    self.chunk_operations.push(RenderOperation::RenderLineBreak);
+                }
+            }
+            // Animated – reuse RainbowBannerAnimation with the selected style
+            BannerAnimation::Animated { style, loop_animation } => {
+                let animation = RainbowBannerAnimation::new(
+                    ascii_lines,
+                    block_length,
+                    alignment,
+                    font_size,
+                    style.clone(),
+                    *loop_animation,
+                    duration,
+                );
+                self.chunk_operations.push(RenderOperation::RenderAsync(Rc::new(animation)));
+            }
+        }
+
+        self.chunk_operations.push(RenderOperation::SetColors(self.theme.default_style.style.colors));
+        Ok(())
     }
 
     fn push_execution_disabled_operation(&mut self, exec_type: ExecutionType) {

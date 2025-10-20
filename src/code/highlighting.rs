@@ -106,6 +106,8 @@ impl SnippetHighlighter {
             Ada => "adb",
             Asp => "asa",
             Awk => "awk",
+            Ascii => "txt",
+            Banner { .. } => "txt",
             Bash => "sh",
             BatchFile => "bat",
             C => "c",

@@ -269,6 +269,26 @@ impl SnippetParser {
                 HighlightedLines(lines) => attributes.highlight_groups = lines,
                 Width(width) => attributes.width = Some(width),
                 ExpectedExecutionResult(result) => attributes.expected_execution_result = result,
+                Animation(mode) => attributes.animation = mode,
+                AnimationStyle(style) => {
+                    attributes.animation = match attributes.animation.clone() {
+                        BannerAnimation::None => BannerAnimation::Animated { style, loop_animation: false },
+                        BannerAnimation::Animated { loop_animation, .. } => {
+                            BannerAnimation::Animated { style, loop_animation }
+                        }
+                    };
+                }
+                AnimationLoop(loop_animation) => {
+                    attributes.animation = match attributes.animation.clone() {
+                        BannerAnimation::None => {
+                            // Enable animation with default style when loop flag is set
+                            BannerAnimation::Animated { style: BannerAnimationStyle::Rainbow, loop_animation }
+                        }
+                        BannerAnimation::Animated { style, .. } => {
+                            BannerAnimation::Animated { style, loop_animation }
+                        }
+                    };
+                }
             };
             processed_attributes.push(discriminant);
             input = rest;
@@ -294,6 +314,12 @@ impl SnippetParser {
                     "render" => SnippetAttribute::Render,
                     "no_background" => SnippetAttribute::NoBackground,
                     "acquire_terminal" => SnippetAttribute::AcquireTerminal(SnippetExecutorSpec::default()),
+                    "loop" => SnippetAttribute::AnimationLoop(true),
+                    "once" => SnippetAttribute::AnimationLoop(false),
+                    // new label
+                    "static" => SnippetAttribute::Animation(BannerAnimation::None),
+                    // backwards compatibility
+                    "no_animate" => SnippetAttribute::Animation(BannerAnimation::None),
                     other => {
                         let (attribute, parameter) = other
                             .split_once(':')
@@ -324,6 +350,30 @@ impl SnippetParser {
                                 "failure" | "fail" => {
                                     SnippetAttribute::ExpectedExecutionResult(ExpectedSnippetExecutionResult::Failure)
                                 }
+                                _ => {
+                                    return Err(SnippetBlockParseError::InvalidToken(
+                                        Self::next_identifier(input).into(),
+                                    ));
+                                }
+                            },
+                            "animate" => match parameter {
+                            "rainbow" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Rainbow),
+                            "flash" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Flash),
+                            "wave" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Wave),
+                            "iris" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Iris),
+                            "plasma" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Plasma),
+                            "scanner" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Scanner),
+                            "matrix" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Matrix),
+                            "neon" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Neon),
+                            "kaleidoscope" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Kaleidoscope),
+                            "sepia" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Sepia),
+                            "prism" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Prism),
+                            "glitch" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Glitch),
+                            "breathe" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Breathe),
+                            "fire" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Fire),
+                            "aurora" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Aurora),
+                            "crt" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Crt),
+                            "typewriter" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Typewriter),
                                 _ => {
                                     return Err(SnippetBlockParseError::InvalidToken(
                                         Self::next_identifier(input).into(),
@@ -445,6 +495,9 @@ enum SnippetAttribute {
     AcquireTerminal(SnippetExecutorSpec),
     ExpectedExecutionResult(ExpectedSnippetExecutionResult),
     Id(String),
+    Animation(BannerAnimation),
+    AnimationStyle(BannerAnimationStyle),
+    AnimationLoop(bool),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -505,6 +558,8 @@ pub enum SnippetLanguage {
     Ada,
     Asp,
     Awk,
+    Ascii,
+    Banner { font: String },
     Bash,
     BatchFile,
     C,
@@ -579,10 +634,19 @@ impl FromStr for SnippetLanguage {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use SnippetLanguage::*;
-        let language = match s.to_lowercase().as_str() {
+
+        // Handle banner:font syntax
+        let lower = s.to_lowercase();
+        if let Some(font) = lower.strip_prefix("banner:") {
+            return Ok(Banner { font: font.to_string() });
+        }
+
+        let language = match lower.as_str() {
+            "ascii" => Ascii,
             "ada" => Ada,
             "asp" => Asp,
             "awk" => Awk,
+            "banner" => Banner { font: "standard".to_string() },
             "bash" => Bash,
             "c" => C,
             "cmake" => CMake,
@@ -680,6 +744,9 @@ pub(crate) struct SnippetAttributes {
 
     /// The identifier for a snippet.
     pub(crate) id: Option<String>,
+
+    /// Animation mode for banners.
+    pub(crate) animation: BannerAnimation,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -699,6 +766,44 @@ pub(crate) enum SnippetExec {
     AutoExec(SnippetExecutorSpec),
     AcquireTerminal(SnippetExecutorSpec),
     Validate(SnippetExecutorSpec),
+}
+
+/// Animation style for banners
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum BannerAnimationStyle {
+    Rainbow,
+    Flash,
+    Wave,
+    Iris,
+    Plasma,
+    Scanner,
+    Matrix,
+    Neon,
+    Kaleidoscope,
+    Sepia,
+    Prism,
+    Glitch,
+    Breathe,
+    Fire,
+    Aurora,
+    Crt,
+    Typewriter,
+}
+
+/// Animation mode for banners
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum BannerAnimation {
+    /// No animation, static rainbow coloring (aka `+static`)
+    None,
+    /// Animated banner, with a style and loop flag
+    Animated { style: BannerAnimationStyle, loop_animation: bool },
+}
+
+impl Default for BannerAnimation {
+    fn default() -> Self {
+        // Default to no animation to render static banners/ascii unless explicitly requested
+        Self::None
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
