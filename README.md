@@ -15,7 +15,7 @@ presenterm
 > - **Animation Control**: `+animate:style`, `+loop`, `+once`, `+static` attributes
 > - **Plain Defaults**: Banners render in monochrome by default—add color selectively with `+animate:rainbow`
 >
-> **See it in action**: Check out [demo.mp4](./demo.mp4) for a quick demonstration of the banner and ASCII art features.
+> ![Banner and ASCII art demo](demo.gif)
 
 [brew-badge]: https://img.shields.io/homebrew/v/presenterm
 [brew-package]: https://formulae.brew.sh/formula/presenterm
