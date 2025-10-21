@@ -6,6 +6,7 @@ use crate::render::operation::{AsRenderOperations, BlockLine, Pollable, Pollable
 use crate::render::properties::WindowSize;
 use crate::theme::Alignment;
 use crate::code::snippet::BannerAnimationStyle;
+use crate::code::animations::{AnimationContext, get_animation};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -124,151 +125,6 @@ fn get_valid_font_path(name: &str) -> Option<String> {
     map.get(&lower).cloned()
 }
 
-/// Matrix-style character set for digital rain effect
-mod matrix_chars {
-    /// Matrix digital rain characters: katakana, Latin, numbers, and symbols
-    pub const MATRIX_CHARS: &[char] = &[
-        // Half-width katakana
-        'ｦ', 'ｱ', 'ｲ', 'ｳ', 'ｴ', 'ｵ', 'ｶ', 'ｷ', 'ｸ', 'ｹ', 'ｺ', 'ｻ', 'ｼ', 'ｽ', 'ｾ', 'ｿ',
-        'ﾀ', 'ﾁ', 'ﾂ', 'ﾃ', 'ﾄ', 'ﾅ', 'ﾆ', 'ﾇ', 'ﾈ', 'ﾉ', 'ﾊ', 'ﾋ', 'ﾌ', 'ﾍ', 'ﾎ', 'ﾏ',
-        'ﾐ', 'ﾑ', 'ﾒ', 'ﾓ', 'ﾔ', 'ﾕ', 'ﾖ', 'ﾗ', 'ﾘ', 'ﾙ', 'ﾚ', 'ﾛ', 'ﾜ', 'ﾝ',
-        // Numbers
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-        // Latin letters (reversed/mirrored for effect)
-        'Z', 'Ǝ', 'Ɔ', 'T', 'Ǝ', 'X', 'Ɔ',
-        // Symbols
-        ':', '.', '=', '*', '+', '-', '<', '>', '¦', '|', '¬',
-    ];
-
-    /// Get a pseudo-random character based on seed
-    pub fn get_char(seed: f32) -> char {
-        let index = ((seed.fract().abs() * MATRIX_CHARS.len() as f32) as usize) % MATRIX_CHARS.len();
-        MATRIX_CHARS[index]
-    }
-}
-
-/// Glitch-style character replacements - visually similar characters for corruption effect
-mod glitch_chars {
-    /// Get a glitched version of a character (visually similar but wrong)
-    pub fn get_glitched_char(original: char, seed: f32) -> Option<char> {
-        // Map characters to their visually similar alternatives
-        let alternatives: &[char] = match original {
-            // Underscores and dashes
-            '_' => &['-', '=', '—', '‾'],
-            '-' => &['_', '=', '–', '―'],
-            '=' => &['-', '_', '≡', '≈'],
-
-            // Vertical bars and I variations
-            '|' => &['I', 'l', '1', '¦', '∣'],
-            'I' => &['l', '|', '1', 'i', '!'],
-            'l' => &['I', '|', '1', 'i', '!'],
-            'i' => &['l', 'I', '!', '¡', '1'],
-            '!' => &['i', 'l', '1', 'I', '¦'],
-            '1' => &['l', 'I', '|', 'i', '!'],
-
-            // O variations
-            'O' => &['0', 'o', 'Ο', 'Ο', 'Ø'],
-            'o' => &['0', 'O', 'ο', '°', 'ø'],
-            '0' => &['O', 'o', 'Ο', 'Ø', '∅'],
-
-            // Slashes
-            '/' => &['\\', '⁄', '∕', '╱'],
-            '\\' => &['/', '⧵', '⧹', '╲'],
-
-            // Parentheses and brackets
-            '(' => &['[', '{', '⟨', 'c', '﹙'],
-            ')' => &[']', '}', '⟩', '﹚'],
-            '[' => &['(', '{', '⟦', '【'],
-            ']' => &[')', '}', '⟧', '】'],
-            '{' => &['[', '(', '⦃', '❴'],
-            '}' => &[']', ')', '⦄', '❵'],
-
-            // Quotes
-            '\'' => &['`', '´', '\u{2018}', '′', '＇'], // ' → ` ´ ' ′ ＇
-            '"' => &['\'', '\u{201C}', '\u{201D}', '″', '〃'], // " → ' " " ″ 〃
-            '`' => &['\'', '\u{2018}', '′', '｀'], // ` → ' ' ′ ｀
-
-            // Punctuation
-            '.' => &[',', '·', '˙', '。', '․'],
-            ',' => &['.', '\'', '‚', '､', '¸'],
-            ':' => &[';', '∶', '᛬', '˸'],
-            ';' => &[':', '‧', '⁏', '︔'],
-
-            // Angle brackets
-            '<' => &['‹', '≺', '⟨', '〈', '＜'],
-            '>' => &['›', '≻', '⟩', '〉', '＞'],
-
-            // Math/misc
-            '+' => &['†', '✚', '➕', '＋'],
-            '*' => &['✱', '⁎', '∗', '＊', '×'],
-            '^' => &['ˆ', '︿', '∧', '＾'],
-            '~' => &['˜', '∼', '～', '≈'],
-
-            // Letters that look similar
-            'A' => &['Α', 'А', 'Ａ', '∆'],
-            'B' => &['Β', 'В', 'Ｂ', 'ß'],
-            'C' => &['Ϲ', 'С', 'Ｃ', '⊂'],
-            'E' => &['Ε', 'Е', 'Ｅ', '∃'],
-            'H' => &['Η', 'Н', 'Ｈ', '卄'],
-            'M' => &['Μ', 'М', 'Ｍ', 'Ⅿ'],
-            'N' => &['Ν', 'Ｎ', 'И', 'ℕ'],
-            'P' => &['Ρ', 'Р', 'Ｐ', 'ℙ'],
-            'S' => &['Ѕ', 'Ｓ', '§', '∫'],
-            'T' => &['Τ', 'Т', 'Ｔ', '┬'],
-            'X' => &['Χ', 'Х', 'Ｘ', '✕'],
-            'Y' => &['Υ', 'Ү', 'Ｙ', '¥'],
-            'Z' => &['Ζ', 'Ｚ', 'ℤ', '≋'],
-
-            // If no alternatives, return None
-            _ => return None,
-        };
-
-        if alternatives.is_empty() {
-            return None;
-        }
-
-        let index = ((seed.fract().abs() * alternatives.len() as f32) as usize) % alternatives.len();
-        Some(alternatives[index])
-    }
-}
-
-/// Rainbow color utilities
-mod rainbow {
-    use super::Color;
-
-    /// Convert HSL to RGB color
-    /// H: hue (0-360), S: saturation (0-100), L: lightness (0-100)
-    pub(crate) fn hsl_to_rgb(h: f32, s: f32, l: f32) -> Color {
-        let s = s / 100.0;
-        let l = l / 100.0;
-
-        let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
-        let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
-        let m = l - c / 2.0;
-
-        let (r, g, b) = match h {
-            h if h < 60.0 => (c, x, 0.0),
-            h if h < 120.0 => (x, c, 0.0),
-            h if h < 180.0 => (0.0, c, x),
-            h if h < 240.0 => (0.0, x, c),
-            h if h < 300.0 => (x, 0.0, c),
-            _ => (c, 0.0, x),
-        };
-
-        Color::new(
-            ((r + m) * 255.0) as u8,
-            ((g + m) * 255.0) as u8,
-            ((b + m) * 255.0) as u8,
-        )
-    }
-
-    /// Generate a rainbow color for a given position
-    /// total: total number of positions, index: current position (0-based)
-    pub(crate) fn rainbow_color(index: usize, total: usize) -> Color {
-        let hue = (index as f32 / total as f32) * 360.0;
-        hsl_to_rgb(hue, 100.0, 50.0)
-    }
-}
 
 /// Generator for ASCII art banners using FIGlet fonts
 pub(crate) struct BannerGenerator {
@@ -295,7 +151,7 @@ impl BannerGenerator {
 
     /// Generate a rainbow color for a given character position
     pub(crate) fn rainbow_color(char_index: usize, total_chars: usize) -> Color {
-        rainbow::rainbow_color(char_index, total_chars)
+        crate::code::animations::rainbow_color(char_index, total_chars)
     }
 
     /// Load a FIGlet font by name
@@ -418,29 +274,32 @@ impl RainbowBannerAnimation {
             .filter(|c| !c.is_whitespace())
             .count();
 
-        let total_rows = self.lines.len() as f32;
+        let total_rows = self.lines.len();
         let mut char_index = 0;
         let mut operations = Vec::new();
 
+        // Get the animation implementation
+        let animation = get_animation(self.style.clone());
+
         for (row_index, line) in self.lines.iter().enumerate() {
             let mut colored_text: Vec<Text> = Vec::new();
+            let total_cols = line.chars().count();
 
             for (col_index, ch) in line.chars().enumerate() {
-                // Always calculate colors for all positions (including whitespace)
-                // This ensures background fills the entire banner area
                 let is_whitespace = ch.is_whitespace();
 
-                // Animation styles can return (fg_color, bg_color, optional_replacement_char)
-                //
-                // Pattern for animations with final freeze frame (for +once mode):
-                // 1. Define animation_duration constant
-                // 2. Check: let animation_complete = hue_offset > animation_duration;
-                // 3. If complete: return stable final state (clean color, no replacements)
-                // 4. Else: return animated state
-                //
-                // This ensures animations converge to readable final text.
-                //
-                // Calculate colors for ALL positions to ensure continuous background
+                // Build animation context
+                let ctx = AnimationContext {
+                    hue_offset,
+                    char_index,
+                    total_chars,
+                    row_index,
+                    total_rows,
+                    col_index,
+                    total_cols,
+                    ch,
+                };
+
                 let (color, bg_color, replacement_char) = if is_whitespace {
                     // For whitespace, calculate background color (foreground doesn't matter)
                     match self.style {
