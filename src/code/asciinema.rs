@@ -230,6 +230,8 @@ pub(crate) struct AsciinemaPlayer {
     loop_playback: bool,
     /// Speed multiplier (1.0 = normal speed)
     speed: f32,
+    /// Start policy for playback
+    start_policy: RenderAsyncStartPolicy,
 }
 
 #[derive(Debug)]
@@ -250,6 +252,7 @@ impl AsciinemaPlayer {
         font_size: u8,
         loop_playback: bool,
         speed: f32,
+        start_policy: RenderAsyncStartPolicy,
     ) -> Self {
         Self {
             recording,
@@ -263,6 +266,7 @@ impl AsciinemaPlayer {
             })),
             loop_playback,
             speed: speed.max(0.1), // Minimum speed to avoid division by zero
+            start_policy,
         }
     }
 
@@ -283,10 +287,30 @@ impl AsciinemaPlayer {
         let text_style = TextStyle::default().size(self.font_size);
 
         let mut operations = Vec::new();
+
+        // Add top border
+        let border_char = "─";
+        let border_text = border_char.repeat(self.recording.width as usize);
+        let border_line = WeightedLine::from(vec![
+            crate::markdown::elements::Text::new(&format!("┌{}┐", border_text), text_style)
+        ]);
+        operations.push(RenderOperation::RenderBlockLine(BlockLine {
+            prefix: WeightedText::from(""),
+            right_padding_length: 0,
+            repeat_prefix_on_wrap: false,
+            text: border_line,
+            block_length: self.block_length,
+            alignment: self.alignment,
+            block_color: None,
+        }));
+        operations.push(RenderOperation::RenderLineBreak);
+
+        // Render terminal content with side borders
         for line in lines {
-            // Create weighted line from the terminal output
+            // Create weighted line from the terminal output with side borders
+            let framed_line = format!("│{}│", line);
             let weighted_line = WeightedLine::from(vec![
-                crate::markdown::elements::Text::new(&line, text_style)
+                crate::markdown::elements::Text::new(&framed_line, text_style)
             ]);
 
             operations.push(RenderOperation::RenderBlockLine(BlockLine {
@@ -300,6 +324,21 @@ impl AsciinemaPlayer {
             }));
             operations.push(RenderOperation::RenderLineBreak);
         }
+
+        // Add bottom border
+        let bottom_border = WeightedLine::from(vec![
+            crate::markdown::elements::Text::new(&format!("└{}┘", border_text), text_style)
+        ]);
+        operations.push(RenderOperation::RenderBlockLine(BlockLine {
+            prefix: WeightedText::from(""),
+            right_padding_length: 0,
+            repeat_prefix_on_wrap: false,
+            text: bottom_border,
+            block_length: self.block_length,
+            alignment: self.alignment,
+            block_color: None,
+        }));
+        operations.push(RenderOperation::RenderLineBreak);
 
         operations
     }
@@ -323,8 +362,7 @@ impl RenderAsync for AsciinemaPlayer {
     }
 
     fn start_policy(&self) -> RenderAsyncStartPolicy {
-        // Always auto-start playback when the slide is displayed
-        RenderAsyncStartPolicy::Automatic
+        self.start_policy
     }
 }
 

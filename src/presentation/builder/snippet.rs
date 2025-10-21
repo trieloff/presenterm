@@ -5,7 +5,7 @@ use crate::{
         banner::{BannerGenerator, MultiBannerContext, MultiBannerLine, MultiBannerLineStatic, MultiBannerMutator, RainbowBannerAnimation},
         execute::{LanguageSnippetExecutor},
         snippet::{
-            BannerAnimation, BannerAnimationStyle, ExternalFile, Highlight, HighlightContext, HighlightGroup, HighlightMutator,
+            AsciinemaLoop, AsciinemaStart, BannerAnimation, BannerAnimationStyle, ExternalFile, Highlight, HighlightContext, HighlightGroup, HighlightMutator,
             HighlightedLine, Snippet, SnippetExec, SnippetExecutorSpec, SnippetLanguage, SnippetLine, SnippetParser,
             SnippetRepr, SnippetSplitter,
         },
@@ -518,8 +518,12 @@ impl PresentationBuilder<'_, '_> {
         let terminal_width = recording.width() as u16;
         let block_length = alignment.adjust_size(terminal_width * font_size as u16);
 
-        // Determine if we should loop (default to true for now, could be made configurable)
-        let loop_playback = true;
+        // Get playback settings from attributes
+        let loop_playback = matches!(snippet.attributes.asciinema_loop, AsciinemaLoop::Loop);
+        let start_policy = match snippet.attributes.asciinema_start {
+            AsciinemaStart::Auto => RenderAsyncStartPolicy::Automatic,
+            AsciinemaStart::Wait => RenderAsyncStartPolicy::OnDemand,
+        };
 
         // Playback speed (could be made configurable via attributes)
         let speed = 1.0;
@@ -532,6 +536,7 @@ impl PresentationBuilder<'_, '_> {
             font_size,
             loop_playback,
             speed,
+            start_policy,
         );
 
         // Add to render operations

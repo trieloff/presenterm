@@ -9,23 +9,27 @@ This presentation demonstrates embedding asciinema recordings in slides.
 
 <!-- end_slide -->
 
-## Live Terminal Recording
+## Live Terminal Recording (Auto-play, Loop)
 
-Here's an embedded asciinema recording:
+Here's an embedded asciinema recording that auto-plays and loops:
 
-```asciinema
-examples/demo.cast
+```asciinema +start:auto +play:loop
+demo.cast
 ```
 
 <!-- end_slide -->
 
-## Using the cast alias
+## Using the cast alias (Wait, Once)
 
-You can also use `cast` as the language identifier:
+You can also use `cast` as the language identifier.
 
-```cast
-examples/demo.cast
+This one waits for a keypress and plays once:
+
+```cast +start:wait +play:once
+demo.cast
 ```
+
+Press space to start playback!
 
 <!-- end_slide -->
 

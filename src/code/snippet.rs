@@ -289,6 +289,8 @@ impl SnippetParser {
                         }
                     };
                 }
+                AsciinemaLoop(loop_mode) => attributes.asciinema_loop = loop_mode,
+                AsciinemaStart(start_mode) => attributes.asciinema_start = start_mode,
             };
             processed_attributes.push(discriminant);
             input = rest;
@@ -374,6 +376,24 @@ impl SnippetParser {
                             "aurora" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Aurora),
                             "crt" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Crt),
                             "typewriter" => SnippetAttribute::AnimationStyle(BannerAnimationStyle::Typewriter),
+                                _ => {
+                                    return Err(SnippetBlockParseError::InvalidToken(
+                                        Self::next_identifier(input).into(),
+                                    ));
+                                }
+                            },
+                            "play" => match parameter {
+                                "once" => SnippetAttribute::AsciinemaLoop(AsciinemaLoop::Once),
+                                "loop" => SnippetAttribute::AsciinemaLoop(AsciinemaLoop::Loop),
+                                _ => {
+                                    return Err(SnippetBlockParseError::InvalidToken(
+                                        Self::next_identifier(input).into(),
+                                    ));
+                                }
+                            },
+                            "start" => match parameter {
+                                "wait" => SnippetAttribute::AsciinemaStart(AsciinemaStart::Wait),
+                                "auto" => SnippetAttribute::AsciinemaStart(AsciinemaStart::Auto),
                                 _ => {
                                     return Err(SnippetBlockParseError::InvalidToken(
                                         Self::next_identifier(input).into(),
@@ -498,6 +518,8 @@ enum SnippetAttribute {
     Animation(BannerAnimation),
     AnimationStyle(BannerAnimationStyle),
     AnimationLoop(bool),
+    AsciinemaLoop(AsciinemaLoop),
+    AsciinemaStart(AsciinemaStart),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -749,6 +771,12 @@ pub(crate) struct SnippetAttributes {
 
     /// Animation mode for banners.
     pub(crate) animation: BannerAnimation,
+
+    /// Asciinema playback loop mode.
+    pub(crate) asciinema_loop: AsciinemaLoop,
+
+    /// Asciinema playback start mode.
+    pub(crate) asciinema_start: AsciinemaStart,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -806,6 +834,26 @@ impl Default for BannerAnimation {
         // Default to no animation to render static banners/ascii unless explicitly requested
         Self::None
     }
+}
+
+/// Asciinema playback loop mode
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AsciinemaLoop {
+    /// Play once and stop on last frame (default)
+    #[default]
+    Once,
+    /// Loop continuously
+    Loop,
+}
+
+/// Asciinema playback start mode
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AsciinemaStart {
+    /// Wait for keypress to start playback (default)
+    #[default]
+    Wait,
+    /// Auto-start playback when slide is shown
+    Auto,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
