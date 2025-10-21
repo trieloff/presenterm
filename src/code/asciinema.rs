@@ -287,7 +287,7 @@ impl AsciinemaPlayer {
         *self.paused.lock().unwrap()
     }
 
-    fn render_frame(&self, timestamp: f64) -> Vec<RenderOperation> {
+    fn render_frame(&self, timestamp: f64, window_size: &WindowSize) -> Vec<RenderOperation> {
         let raw_output = self.recording.get_frame_at(timestamp);
 
         // Parse the terminal output using VTE
@@ -303,8 +303,14 @@ impl AsciinemaPlayer {
         let lines = screen.get_lines();
         let text_style = TextStyle::default().size(self.font_size);
 
-        // Use the recording width for consistent frame size
-        let frame_width = self.recording.width as usize;
+        // Calculate effective frame width considering terminal width
+        // Account for borders (2 chars: │ on each side) and some margin
+        let available_width = window_size.columns.saturating_sub(4) as usize; // 2 for borders + 2 for minimal margin
+        let frame_width = self.recording.width.min(available_width as u32) as usize;
+
+        // Use left alignment with no margin to prevent the layout system from adding
+        // extra space or enforcing minimum sizes that cause wrapping
+        let frame_alignment = Alignment::Left { margin: crate::theme::Margin::Fixed(0) };
 
         let mut operations = Vec::new();
 
@@ -320,7 +326,7 @@ impl AsciinemaPlayer {
             repeat_prefix_on_wrap: false,
             text: border_line,
             block_length: self.block_length,
-            alignment: self.alignment,
+            alignment: frame_alignment,
             block_color: None,
         }));
         operations.push(RenderOperation::RenderLineBreak);
@@ -349,7 +355,7 @@ impl AsciinemaPlayer {
                 repeat_prefix_on_wrap: false,
                 text: weighted_line,
                 block_length: self.block_length,
-                alignment: self.alignment,
+                alignment: frame_alignment,
                 block_color: None,
             }));
             operations.push(RenderOperation::RenderLineBreak);
@@ -365,7 +371,7 @@ impl AsciinemaPlayer {
             repeat_prefix_on_wrap: false,
             text: bottom_border,
             block_length: self.block_length,
-            alignment: self.alignment,
+            alignment: frame_alignment,
             block_color: None,
         }));
         operations.push(RenderOperation::RenderLineBreak);
@@ -375,9 +381,9 @@ impl AsciinemaPlayer {
 }
 
 impl AsRenderOperations for AsciinemaPlayer {
-    fn as_render_operations(&self, _: &WindowSize) -> Vec<RenderOperation> {
+    fn as_render_operations(&self, window_size: &WindowSize) -> Vec<RenderOperation> {
         let state = self.state.lock().unwrap();
-        self.render_frame(state.current_time)
+        self.render_frame(state.current_time, window_size)
     }
 }
 
