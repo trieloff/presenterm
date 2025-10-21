@@ -1,10 +1,11 @@
 use super::{BuildError, BuildResult};
 use crate::{
     code::{
+        asciinema::{AsciinemaPlayer, AsciinemaRecording, AsciinemaResumeMutator},
         banner::{BannerGenerator, MultiBannerContext, MultiBannerLine, MultiBannerLineStatic, MultiBannerMutator, RainbowBannerAnimation},
-        execute::LanguageSnippetExecutor,
+        execute::{LanguageSnippetExecutor},
         snippet::{
-            BannerAnimation, BannerAnimationStyle, ExternalFile, Highlight, HighlightContext, HighlightGroup, HighlightMutator,
+            AsciinemaLoop, AsciinemaStart, BannerAnimation, BannerAnimationStyle, ExternalFile, Highlight, HighlightContext, HighlightGroup, HighlightMutator,
             HighlightedLine, Snippet, SnippetExec, SnippetExecutorSpec, SnippetLanguage, SnippetLine, SnippetParser,
             SnippetRepr, SnippetSplitter,
         },
@@ -41,6 +42,9 @@ impl PresentationBuilder<'_, '_> {
             }
             SnippetLanguage::Ascii => {
                 return self.push_ascii(snippet, source_position);
+            }
+            SnippetLanguage::Asciinema => {
+                return self.push_asciinema(snippet, source_position);
             }
             _ => {}
         }
@@ -482,6 +486,75 @@ impl PresentationBuilder<'_, '_> {
         }
 
         self.chunk_operations.push(RenderOperation::SetColors(self.theme.default_style.style.colors));
+        Ok(())
+    }
+
+    fn push_asciinema(&mut self, snippet: Snippet, source_position: SourcePosition) -> BuildResult {
+        use std::rc::Rc;
+
+        // The snippet contents should be a path to a .cast file
+        let cast_path = snippet.contents.trim();
+        let base_path = self.resource_base_path();
+
+        // Load the cast file
+        let cast_content = self.resources.external_text_file(cast_path, &base_path)
+            .map_err(|e| self.invalid_presentation(
+                source_position,
+                InvalidPresentation::Snippet(format!("failed to load asciinema file '{}': {}", cast_path, e))
+            ))?;
+
+        // Parse the recording
+        let recording = AsciinemaRecording::from_cast(&cast_content)
+            .map_err(|e| self.invalid_presentation(
+                source_position,
+                InvalidPresentation::Snippet(format!("failed to parse asciinema file '{}': {}", cast_path, e))
+            ))?;
+
+        // Get style settings
+        let font_size = self.slide_font_size();
+        let alignment = self.theme.code.alignment;
+
+        // Calculate block length based on terminal width
+        // Add 2 for the frame borders (│ on each side)
+        let content_width_chars = recording.width() as usize + 2;
+        let block_length = alignment.adjust_size((content_width_chars * font_size as usize) as u16);
+
+        // Get playback settings from attributes
+        let loop_playback = matches!(snippet.attributes.asciinema_loop, AsciinemaLoop::Loop);
+        let is_wait_mode = matches!(snippet.attributes.asciinema_start, AsciinemaStart::Wait);
+
+        // Wait mode uses OnDemand (starts when slide shown, but paused)
+        // Auto mode uses Automatic (starts immediately)
+        let start_policy = if is_wait_mode {
+            RenderAsyncStartPolicy::OnDemand
+        } else {
+            RenderAsyncStartPolicy::Automatic
+        };
+
+        // Playback speed (could be made configurable via attributes)
+        let speed = 1.0;
+
+        // Create the player - pass is_wait_mode separately
+        let player = Rc::new(AsciinemaPlayer::new(
+            recording,
+            block_length,
+            alignment,
+            font_size,
+            loop_playback,
+            speed,
+            start_policy,
+            is_wait_mode,  // Pass wait mode flag
+        ));
+
+        // For wait mode, add a chunk mutator to resume playback
+        if is_wait_mode {
+            self.chunk_mutators.push(Box::new(AsciinemaResumeMutator::new(player.clone())));
+        }
+
+        // Add to render operations
+        self.chunk_operations.push(RenderOperation::RenderAsync(player));
+        self.chunk_operations.push(RenderOperation::SetColors(self.theme.default_style.style.colors));
+
         Ok(())
     }
 

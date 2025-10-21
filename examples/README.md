@@ -62,7 +62,26 @@ This example shows how to use speaker notes.
 
 [Source](/examples/custom-intro-slides.md)
 
-This example various custom introduction slides that contain images placed in different layouts. Note that the images 
+This example various custom introduction slides that contain images placed in different layouts. Note that the images
 looks pixelated because of asciinema but they will otherwise look normal in your terminal.
 
 [![asciicast](https://asciinema.org/a/sBeAMJbpBxqKA2gF2RI3MmLT7.svg)](https://asciinema.org/a/sBeAMJbpBxqKA2gF2RI3MmLT7)
+
+# Terminal Recording Demo
+
+[Source](/examples/terminal-recording.md)
+
+This comprehensive example demonstrates how to embed asciinema terminal recordings in your presentations. It showcases:
+
+* Embedding live terminal sessions with `asciinema` and `cast` code blocks
+* Best practices for creating terminal recordings
+* Use cases for terminal recordings in presentations
+* Tips for creating engaging demos
+
+The presentation includes a real terminal recording showing shell commands and outputs.
+
+# Asciinema Demo
+
+[Source](/examples/asciinema-demo.md)
+
+A quick demonstration of basic asciinema recording support in presenterm, showing both `asciinema` and `cast` language identifiers.

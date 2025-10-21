@@ -5,12 +5,16 @@ presenterm
 [![arch-badge]][arch-package] [![scoop-badge]][scoop-package] [![winget-badge]][winget-package]
 
 > [!NOTE]
-> **This is a personal fork** with experimental ASCII art and banner features. See the [original presenterm repository](https://github.com/mfontanini/presenterm) for the official version.
+> **This is a personal fork** with experimental ASCII art, banner, and asciinema features. See the [original presenterm repository](https://github.com/mfontanini/presenterm) for the official version.
 >
 > ### New Features in This Fork:
 >
 > - **ASCII Art Blocks**: Use ` ```ascii ` for plain ASCII art with optional animations
 > - **FIGlet Banners**: Use ` ```banner:fontname ` to create text banners in 149+ different fonts
+> - **Asciinema Recordings**: Use ` ```asciinema ` or ` ```cast ` to embed terminal recordings
+>   - `+start:auto` / `+start:wait` - Auto-play or wait for keypress
+>   - `+play:loop` / `+play:once` - Loop or play once
+>   - Responsive frames that adapt to narrow terminals
 > - **17 Animation Styles**: rainbow, matrix, wave, plasma, fire, glitch, kaleidoscope, and more
 > - **Animation Control**: `+animate:style`, `+loop`, `+once`, `+static` attributes
 > - **Plain Defaults**: Banners render in monochrome by default—add color selectively with `+animate:rainbow`

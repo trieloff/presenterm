@@ -1,3 +1,4 @@
+pub(crate) mod asciinema;
 pub(crate) mod banner;
 pub(crate) mod execute;
 pub(crate) mod highlighting;

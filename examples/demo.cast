@@ -1,0 +1,12 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1234567890}
+[0.0, "o", "$ "]
+[0.5, "o", "echo 'Hello from asciinema!'"]
+[1.0, "o", "\r\n"]
+[1.5, "o", "Hello from asciinema!\r\n"]
+[2.0, "o", "$ "]
+[2.5, "o", "ls -la"]
+[3.0, "o", "\r\n"]
+[3.5, "o", "total 8\r\n"]
+[4.0, "o", "drwxr-xr-x  2 user  staff   64 Jan  1 00:00 .\r\n"]
+[4.5, "o", "drwxr-xr-x  3 user  staff   96 Jan  1 00:00 ..\r\n"]
+[5.0, "o", "$ "]

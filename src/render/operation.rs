@@ -190,8 +190,11 @@ pub(crate) enum RenderAsyncStartPolicy {
     /// Start automatically.
     Automatic,
 
-    /// Start on demand.
+    /// Start on demand (when slide is first shown).
     OnDemand,
+
+    /// Start manually (only when explicitly triggered by keypress).
+    Manual,
 }
 
 /// A pollable that can be used to pull and update the state of an operation asynchronously.
