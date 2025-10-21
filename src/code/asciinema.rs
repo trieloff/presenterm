@@ -244,6 +244,8 @@ struct PlaybackState {
     current_time: f64,
     /// Whether playback has completed
     completed: bool,
+    /// Last known paused state (to detect transitions)
+    was_paused: bool,
 }
 
 impl AsciinemaPlayer {
@@ -268,6 +270,7 @@ impl AsciinemaPlayer {
                 start_time: None,
                 current_time: 0.0,
                 completed: false,
+                was_paused: is_paused,
             })),
             loop_playback,
             speed: speed.max(0.1), // Minimum speed to avoid division by zero
@@ -406,16 +409,31 @@ struct AsciinemaPlaybackPollable {
 
 impl Pollable for AsciinemaPlaybackPollable {
     fn poll(&mut self) -> PollableState {
-        // Check if paused (for wait mode)
+        let mut state = self.state.lock().unwrap();
         let is_paused = *self.paused.lock().unwrap();
+
+        // Detect pause state transitions
+        if is_paused != state.was_paused {
+            state.was_paused = is_paused;
+            if !is_paused {
+                // Just unpaused! Start playback
+                state.start_time = Some(Instant::now());
+                state.current_time = 0.0;
+                return PollableState::Modified;
+            }
+        }
+
+        // If paused, stay on first frame
         if is_paused {
-            // Stay on first frame
+            if state.start_time.is_none() && state.current_time == 0.0 {
+                // First time showing paused state
+                return PollableState::Modified;
+            }
+            // Keep polling to detect unpause, but don't update display
             return PollableState::Unmodified;
         }
 
-        let mut state = self.state.lock().unwrap();
-
-        // Initialize start time on first poll after unpause
+        // Not paused - normal playback
         if state.start_time.is_none() {
             state.start_time = Some(Instant::now());
             state.current_time = 0.0;
