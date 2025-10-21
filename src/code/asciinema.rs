@@ -257,10 +257,8 @@ impl AsciinemaPlayer {
         loop_playback: bool,
         speed: f32,
         start_policy: RenderAsyncStartPolicy,
+        is_wait_mode: bool,  // Whether to start paused
     ) -> Self {
-        // For Manual (wait) mode, start paused on first frame
-        let is_paused = matches!(start_policy, RenderAsyncStartPolicy::Manual);
-
         Self {
             recording,
             block_length,
@@ -270,12 +268,12 @@ impl AsciinemaPlayer {
                 start_time: None,
                 current_time: 0.0,
                 completed: false,
-                was_paused: is_paused,
+                was_paused: is_wait_mode,
             })),
             loop_playback,
             speed: speed.max(0.1), // Minimum speed to avoid division by zero
             start_policy,
-            paused: Arc::new(Mutex::new(is_paused)),
+            paused: Arc::new(Mutex::new(is_wait_mode)),
         }
     }
 

@@ -523,13 +523,18 @@ impl PresentationBuilder<'_, '_> {
         let loop_playback = matches!(snippet.attributes.asciinema_loop, AsciinemaLoop::Loop);
         let is_wait_mode = matches!(snippet.attributes.asciinema_start, AsciinemaStart::Wait);
 
-        // Use Automatic for both modes - wait mode will be paused initially
-        let start_policy = RenderAsyncStartPolicy::Automatic;
+        // Wait mode uses OnDemand (starts when slide shown, but paused)
+        // Auto mode uses Automatic (starts immediately)
+        let start_policy = if is_wait_mode {
+            RenderAsyncStartPolicy::OnDemand
+        } else {
+            RenderAsyncStartPolicy::Automatic
+        };
 
         // Playback speed (could be made configurable via attributes)
         let speed = 1.0;
 
-        // Create the player
+        // Create the player - pass is_wait_mode separately
         let player = Rc::new(AsciinemaPlayer::new(
             recording,
             block_length,
@@ -537,7 +542,8 @@ impl PresentationBuilder<'_, '_> {
             font_size,
             loop_playback,
             speed,
-            if is_wait_mode { RenderAsyncStartPolicy::Manual } else { start_policy },
+            start_policy,
+            is_wait_mode,  // Pass wait mode flag
         ));
 
         // For wait mode, add a chunk mutator to resume playback
