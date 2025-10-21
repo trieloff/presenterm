@@ -232,6 +232,8 @@ pub(crate) struct AsciinemaPlayer {
     speed: f32,
     /// Start policy for playback
     start_policy: RenderAsyncStartPolicy,
+    /// Paused state for wait mode
+    paused: Arc<Mutex<bool>>,
 }
 
 #[derive(Debug)]
@@ -254,6 +256,9 @@ impl AsciinemaPlayer {
         speed: f32,
         start_policy: RenderAsyncStartPolicy,
     ) -> Self {
+        // For Manual (wait) mode, start paused on first frame
+        let is_paused = matches!(start_policy, RenderAsyncStartPolicy::Manual);
+
         Self {
             recording,
             block_length,
@@ -267,7 +272,18 @@ impl AsciinemaPlayer {
             loop_playback,
             speed: speed.max(0.1), // Minimum speed to avoid division by zero
             start_policy,
+            paused: Arc::new(Mutex::new(is_paused)),
         }
+    }
+
+    /// Resume playback (used for wait mode)
+    pub(crate) fn resume(&self) {
+        *self.paused.lock().unwrap() = false;
+    }
+
+    /// Check if paused
+    pub(crate) fn is_paused(&self) -> bool {
+        *self.paused.lock().unwrap()
     }
 
     fn render_frame(&self, timestamp: f64) -> Vec<RenderOperation> {
@@ -371,6 +387,7 @@ impl RenderAsync for AsciinemaPlayer {
             duration: self.recording.duration(),
             loop_playback: self.loop_playback,
             speed: self.speed,
+            paused: self.paused.clone(),
         })
     }
 
@@ -384,13 +401,21 @@ struct AsciinemaPlaybackPollable {
     duration: f64,
     loop_playback: bool,
     speed: f32,
+    paused: Arc<Mutex<bool>>,
 }
 
 impl Pollable for AsciinemaPlaybackPollable {
     fn poll(&mut self) -> PollableState {
+        // Check if paused (for wait mode)
+        let is_paused = *self.paused.lock().unwrap();
+        if is_paused {
+            // Stay on first frame
+            return PollableState::Unmodified;
+        }
+
         let mut state = self.state.lock().unwrap();
 
-        // Initialize start time on first poll
+        // Initialize start time on first poll after unpause
         if state.start_time.is_none() {
             state.start_time = Some(Instant::now());
             state.current_time = 0.0;
@@ -419,6 +444,63 @@ impl Pollable for AsciinemaPlaybackPollable {
 
         state.current_time = playback_time;
         PollableState::Modified
+    }
+}
+
+/// Chunk mutator for wait-mode asciinema playback
+/// First build shows paused first frame, subsequent builds resume playback
+#[derive(Debug)]
+pub(crate) struct AsciinemaResumeMutator {
+    player: std::rc::Rc<AsciinemaPlayer>,
+    resumed: std::cell::Cell<bool>,
+}
+
+impl AsciinemaResumeMutator {
+    pub(crate) fn new(player: std::rc::Rc<AsciinemaPlayer>) -> Self {
+        Self {
+            player,
+            resumed: std::cell::Cell::new(false),
+        }
+    }
+}
+
+impl crate::presentation::ChunkMutator for AsciinemaResumeMutator {
+    fn mutate_next(&self) -> bool {
+        // On first advance, resume playback
+        if !self.resumed.get() {
+            self.player.resume();
+            self.resumed.set(true);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn mutate_previous(&self) -> bool {
+        // Can't go back to paused state
+        false
+    }
+
+    fn reset_mutations(&self) {
+        // Reset to paused state
+        self.resumed.set(false);
+    }
+
+    fn apply_all_mutations(&self) {
+        // Resume playback
+        if !self.resumed.get() {
+            self.player.resume();
+            self.resumed.set(true);
+        }
+    }
+
+    fn mutations(&self) -> (usize, usize) {
+        // Single mutation: from paused to playing
+        if self.resumed.get() {
+            (1, 1)
+        } else {
+            (0, 1)
+        }
     }
 }
 
