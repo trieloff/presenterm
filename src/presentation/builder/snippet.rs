@@ -522,7 +522,7 @@ impl PresentationBuilder<'_, '_> {
         let loop_playback = matches!(snippet.attributes.asciinema_loop, AsciinemaLoop::Loop);
         let start_policy = match snippet.attributes.asciinema_start {
             AsciinemaStart::Auto => RenderAsyncStartPolicy::Automatic,
-            AsciinemaStart::Wait => RenderAsyncStartPolicy::OnDemand,
+            AsciinemaStart::Wait => RenderAsyncStartPolicy::Manual,
         };
 
         // Playback speed (could be made configurable via attributes)

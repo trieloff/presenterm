@@ -319,7 +319,7 @@ impl<'a> Presenter<'a> {
                 true
             }
             Command::RenderAsyncOperations => {
-                let pollables = Self::trigger_slide_async_renders(presentation);
+                let pollables = Self::trigger_manual_async_renders(presentation);
                 if !pollables.is_empty() {
                     for pollable in pollables {
                         self.poller.send(PollerCommand::Poll { pollable, slide: presentation.current_slide_index() });
@@ -429,6 +429,19 @@ impl<'a> Presenter<'a> {
         for operation in slide.iter_visible_operations_mut() {
             if let RenderOperation::RenderAsync(operation) = operation {
                 if let RenderAsyncStartPolicy::OnDemand = operation.start_policy() {
+                    pollables.push(operation.pollable());
+                }
+            }
+        }
+        pollables
+    }
+
+    fn trigger_manual_async_renders(presentation: &mut Presentation) -> Vec<Box<dyn Pollable>> {
+        let slide = presentation.current_slide_mut();
+        let mut pollables = Vec::new();
+        for operation in slide.iter_visible_operations_mut() {
+            if let RenderOperation::RenderAsync(operation) = operation {
+                if let RenderAsyncStartPolicy::Manual = operation.start_policy() {
                     pollables.push(operation.pollable());
                 }
             }

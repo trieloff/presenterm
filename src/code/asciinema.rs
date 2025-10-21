@@ -286,11 +286,14 @@ impl AsciinemaPlayer {
         let lines = screen.get_lines();
         let text_style = TextStyle::default().size(self.font_size);
 
+        // Use the recording width for consistent frame size
+        let frame_width = self.recording.width as usize;
+
         let mut operations = Vec::new();
 
         // Add top border
         let border_char = "─";
-        let border_text = border_char.repeat(self.recording.width as usize);
+        let border_text = border_char.repeat(frame_width);
         let border_line = WeightedLine::from(vec![
             crate::markdown::elements::Text::new(&format!("┌{}┐", border_text), text_style)
         ]);
@@ -307,8 +310,18 @@ impl AsciinemaPlayer {
 
         // Render terminal content with side borders
         for line in lines {
+            // Pad or truncate line to exact frame width
+            let mut padded_line = line.clone();
+            if padded_line.len() > frame_width {
+                padded_line.truncate(frame_width);
+            } else {
+                while padded_line.len() < frame_width {
+                    padded_line.push(' ');
+                }
+            }
+
             // Create weighted line from the terminal output with side borders
-            let framed_line = format!("│{}│", line);
+            let framed_line = format!("│{}│", padded_line);
             let weighted_line = WeightedLine::from(vec![
                 crate::markdown::elements::Text::new(&framed_line, text_style)
             ]);
