@@ -22,6 +22,8 @@ mod typewriter;
 mod wave;
 
 pub(crate) use common::{Animation, AnimationContext, CharAnimationResult, hsl_to_rgb, rainbow_color};
+pub(crate) use glitch_chars::get_glitched_char;
+pub(crate) use matrix_chars::get_char as get_matrix_char;
 
 use crate::code::snippet::BannerAnimationStyle;
 

@@ -6,7 +6,7 @@ use crate::render::operation::{AsRenderOperations, BlockLine, Pollable, Pollable
 use crate::render::properties::WindowSize;
 use crate::theme::Alignment;
 use crate::code::snippet::BannerAnimationStyle;
-use crate::code::animations::{AnimationContext, get_animation};
+use crate::code::animations::{AnimationContext, get_animation, hsl_to_rgb, get_glitched_char, get_matrix_char};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -321,7 +321,7 @@ impl RainbowBannerAnimation {
                                     1.0 - ((hue_offset - fadeout_start) / (animation_duration - fadeout_start))
                                 };
 
-                                let center_y = total_rows / 2.0;
+                                let center_y = total_rows as f32 / 2.0;
                                 let dist_y = (row_index as f32 - center_y).abs();
 
                                 let total_cols = line.chars().count() as f32;
@@ -345,7 +345,7 @@ impl RainbowBannerAnimation {
 
                                 // Return background only if lightness is above threshold
                                 let bg_color = if bg_lightness > 0.5 {
-                                    Some(rainbow::hsl_to_rgb(bg_hue, bg_saturation, bg_lightness))
+                                    Some(hsl_to_rgb(bg_hue, bg_saturation, bg_lightness))
                                 } else {
                                     None
                                 };
@@ -364,12 +364,12 @@ impl RainbowBannerAnimation {
                         BannerAnimationStyle::Rainbow => {
                             let base_hue = (char_index as f32 / total_chars as f32) * 360.0;
                             let hue = (base_hue + hue_offset) % 360.0;
-                            (rainbow::hsl_to_rgb(hue, 100.0, 50.0), None, None)
+                            (hsl_to_rgb(hue, 100.0, 50.0), None, None)
                         }
                         BannerAnimationStyle::Flash => {
                             // Single color for all characters, hue cycles with time
                             let hue = hue_offset % 360.0;
-                            (rainbow::hsl_to_rgb(hue, 100.0, 50.0), None, None)
+                            (hsl_to_rgb(hue, 100.0, 50.0), None, None)
                         }
                         BannerAnimationStyle::Wave => {
                             // Hue oscillates around a base using a sine wave along characters
@@ -378,7 +378,7 @@ impl RainbowBannerAnimation {
                             let freq = 0.35; // chars per cycle
                             let phase = hue_offset.to_radians();
                             let hue = base + amplitude * ((char_index as f32 * freq + phase).sin());
-                            (rainbow::hsl_to_rgb(((hue % 360.0) + 360.0) % 360.0, 100.0, 50.0), None, None)
+                            (hsl_to_rgb(((hue % 360.0) + 360.0) % 360.0, 100.0, 50.0), None, None)
                         }
                         BannerAnimationStyle::Iris => {
                             // Lightness pulse expanding from center
@@ -389,7 +389,7 @@ impl RainbowBannerAnimation {
                             let l = if dist <= radius { 60.0 } else { 35.0 };
                             // Fixed hue rainbow mapping by index for variety
                             let hue = (pos / total_chars as f32) * 360.0;
-                            (rainbow::hsl_to_rgb(hue % 360.0, 100.0, l), None, None)
+                            (hsl_to_rgb(hue % 360.0, 100.0, l), None, None)
                         }
                         BannerAnimationStyle::Plasma => {
                             // Psychedelic plasma effect using multiple overlapping sine waves
@@ -403,7 +403,7 @@ impl RainbowBannerAnimation {
 
                             // Average the waves and map from -1..1 to 0..360
                             let hue = ((wave1 + wave2 + wave3) / 3.0 + 1.0) * 180.0;
-                            (rainbow::hsl_to_rgb(hue % 360.0, 100.0, 50.0), None, None)
+                            (hsl_to_rgb(hue % 360.0, 100.0, 50.0), None, None)
                         }
                         BannerAnimationStyle::Scanner => {
                             // Horizontal scan line effect like KITT from Knight Rider
@@ -411,7 +411,7 @@ impl RainbowBannerAnimation {
                             let dist = (char_index as f32 - scan_pos).abs();
                             let lightness = (70.0 - (dist * 8.0)).max(30.0);
                             // Classic red scanner
-                            (rainbow::hsl_to_rgb(0.0, 100.0, lightness), None, None)
+                            (hsl_to_rgb(0.0, 100.0, lightness), None, None)
                         }
                         BannerAnimationStyle::Neon => {
                             // Bright neon sign colors cycling through classic neon palette
@@ -433,7 +433,7 @@ impl RainbowBannerAnimation {
                             let pulse = (hue_offset * 0.1).sin() * 5.0;
                             let lightness = base_lightness + pulse;
 
-                            (rainbow::hsl_to_rgb(hue % 360.0, 100.0, lightness), None, None)
+                            (hsl_to_rgb(hue % 360.0, 100.0, lightness), None, None)
                         }
                         BannerAnimationStyle::Matrix => {
                             // Matrix-style digital rain effect with varying green shades and characters
@@ -448,7 +448,7 @@ impl RainbowBannerAnimation {
                             let cascade_pos = row_index as f32 - time_offset;
 
                             // Animation completion: add settle time after cascade finishes
-                            let animation_complete = time_offset > (total_rows + 3.0);
+                            let animation_complete = time_offset > (total_rows as f32 + 3.0);
                             let cascade_has_passed = time_offset > row_index as f32;
 
                             // Characters near the cascade front are brightest (white-green)
@@ -484,24 +484,24 @@ impl RainbowBannerAnimation {
                                 let glitch_chance = (char_seed * 37.1 + hue_offset * 0.03).sin();
                                 if glitch_chance > 0.95 {
                                     // Rare glitch: briefly show Matrix character
-                                    Some(matrix_chars::get_char(char_seed + hue_offset * 10.0))
+                                    Some(get_matrix_char(char_seed + hue_offset * 10.0))
                                 } else {
                                     // Normal: show actual character
                                     None
                                 }
                             } else {
                                 // Cascade hasn't reached yet - show Matrix characters
-                                Some(matrix_chars::get_char(char_seed + hue_offset * 0.5))
+                                Some(get_matrix_char(char_seed + hue_offset * 0.5))
                             };
 
-                            (rainbow::hsl_to_rgb(hue, saturation, lightness), None, replacement)
+                            (hsl_to_rgb(hue, saturation, lightness), None, replacement)
                         }
                         BannerAnimationStyle::Sepia => {
                             // Subdued vintage monochrome sepia tone with gentle brightness wave
                             let hue = 30.0; // Warm brown/sepia tone
                             let saturation = 45.0; // Desaturated vintage look
                             let lightness = 35.0 + 15.0 * (char_index as f32 * 0.15 + hue_offset * 0.05).sin();
-                            (rainbow::hsl_to_rgb(hue, saturation, lightness), None, None)
+                            (hsl_to_rgb(hue, saturation, lightness), None, None)
                         }
                         BannerAnimationStyle::Kaleidoscope => {
                             // Enhanced psychedelic symmetrical rotating color patterns
@@ -516,7 +516,7 @@ impl RainbowBannerAnimation {
                                 // Final state: maximum readability with NO background
                                 // Use simple rainbow for foreground, transparent background
                                 let base_hue = (char_index as f32 / total_chars as f32) * 360.0;
-                                let fg_color = rainbow::hsl_to_rgb(base_hue, 85.0, 75.0);
+                                let fg_color = hsl_to_rgb(base_hue, 85.0, 75.0);
                                 (fg_color, None, None)
                             } else {
                                 // Active animation state with fade-out
@@ -531,7 +531,7 @@ impl RainbowBannerAnimation {
 
                                 // Calculate positions relative to center for radial symmetry
                                 let center_x = (total_chars as f32) / 2.0;
-                                let center_y = total_rows / 2.0;
+                                let center_y = total_rows as f32 / 2.0;
                                 let dist_x = (char_index as f32 - center_x).abs();
                                 let dist_y = (row_index as f32 - center_y).abs();
 
@@ -603,11 +603,11 @@ impl RainbowBannerAnimation {
 
                                 let final_fg_lightness = (fg_lightness + sparkle).clamp(75.0, 95.0);
 
-                                let fg_color = rainbow::hsl_to_rgb(fg_hue, fg_saturation, final_fg_lightness);
+                                let fg_color = hsl_to_rgb(fg_hue, fg_saturation, final_fg_lightness);
 
                                 // Return background only if fade_factor > 0
                                 let bg_color = if bg_lightness > 0.5 {
-                                    Some(rainbow::hsl_to_rgb(bg_hue, bg_saturation, bg_lightness))
+                                    Some(hsl_to_rgb(bg_hue, bg_saturation, bg_lightness))
                                 } else {
                                     None
                                 };
@@ -620,7 +620,7 @@ impl RainbowBannerAnimation {
                             // Characters at bottom are red, middle orange, top yellow
 
                             // Calculate vertical position (0.0 at bottom to 1.0 at top)
-                            let vertical_pos = row_index as f32 / total_rows.max(1.0);
+                            let vertical_pos = row_index as f32 / (total_rows as f32).max(1.0);
 
                             // Base hue for fire: 0° (red) at bottom to 60° (yellow) at top
                             let base_hue = vertical_pos * 60.0;
@@ -637,7 +637,7 @@ impl RainbowBannerAnimation {
                             let lightness_flicker = (hue_offset * 0.15 + char_index as f32 * 0.2 + row_index as f32 * 0.4).sin() * 10.0;
                             let lightness = (base_lightness + lightness_flicker).max(45.0).min(65.0);
 
-                            (rainbow::hsl_to_rgb(hue, saturation, lightness), None, None)
+                            (hsl_to_rgb(hue, saturation, lightness), None, None)
                         }
                         BannerAnimationStyle::Glitch => {
                             // Cyberpunk glitch aesthetic with random color flickering and character corruption
@@ -647,7 +647,7 @@ impl RainbowBannerAnimation {
 
                             if animation_complete {
                                 // Final stable state: clean green color (like terminal recovered)
-                                (rainbow::hsl_to_rgb(120.0, 60.0, 55.0), None, None)
+                                (hsl_to_rgb(120.0, 60.0, 55.0), None, None)
                             } else {
                                 // Active glitching phase
                                 // Use character index + hue_offset as seed for pseudo-random behavior
@@ -677,12 +677,12 @@ impl RainbowBannerAnimation {
                                 let should_glitch = char_glitch_seed.fract() > glitch_threshold;
 
                                 let replacement = if should_glitch {
-                                    glitch_chars::get_glitched_char(ch, char_glitch_seed)
+                                    get_glitched_char(ch, char_glitch_seed)
                                 } else {
                                     None
                                 };
 
-                                (rainbow::hsl_to_rgb(hue, saturation, lightness), None, replacement)
+                                (hsl_to_rgb(hue, saturation, lightness), None, replacement)
                             }
                         }
                         BannerAnimationStyle::Breathe => {
@@ -692,7 +692,7 @@ impl RainbowBannerAnimation {
                             let saturation = 65.0; // Calming, not too vibrant
                             // Synchronized breathing: all characters pulse together
                             let lightness = 35.0 + 20.0 * (hue_offset * 0.05).sin();
-                            (rainbow::hsl_to_rgb(hue % 360.0, saturation, lightness), None, None)
+                            (hsl_to_rgb(hue % 360.0, saturation, lightness), None, None)
                         }
                         BannerAnimationStyle::Prism => {
                             // Spectrum split and refraction effect like light through a prism
@@ -709,7 +709,7 @@ impl RainbowBannerAnimation {
                             let dist_from_center = (beam_pos - beam_center).abs();
                             let lightness = 55.0 - (dist_from_center / beam_center) * 10.0;
 
-                            (rainbow::hsl_to_rgb(hue % 360.0, 100.0, lightness), None, None)
+                            (hsl_to_rgb(hue % 360.0, 100.0, lightness), None, None)
                         }
                         BannerAnimationStyle::Aurora => {
                             // Northern lights effect: flowing vertical curtains of green/teal/purple
@@ -733,7 +733,7 @@ impl RainbowBannerAnimation {
                             let base_lightness = 45.0 + field.abs() * 18.0; // brighter on wave ridges
                             let lightness = base_lightness + (y * 0.25 + t).sin() * 6.0;
 
-                            (rainbow::hsl_to_rgb(hue % 360.0, saturation.clamp(35.0, 100.0), lightness.clamp(30.0, 80.0)), None, None)
+                            (hsl_to_rgb(hue % 360.0, saturation.clamp(35.0, 100.0), lightness.clamp(30.0, 80.0)), None, None)
                         }
                         BannerAnimationStyle::Crt => {
                             // Retro CRT effect with scanlines, phosphor triads, and rolling highlight
@@ -758,7 +758,7 @@ impl RainbowBannerAnimation {
                             // Rolling bright bar moving down (vertical retrace)
                             let bar_pos = (t * 0.35) % 360.0; // 0..360
                             // Map 0..360 to rows cyclically
-                            let bar_row = (bar_pos / 360.0) * total_rows.max(1.0);
+                            let bar_row = (bar_pos / 360.0) * (total_rows as f32).max(1.0);
                             let dist = (y - bar_row).abs();
                             let bar_boost = (1.0 - (dist / 2.5).min(1.0)) * 18.0; // strong near the bar
 
@@ -768,7 +768,7 @@ impl RainbowBannerAnimation {
                             let saturation = 75.0;
                             let lightness = 42.0 + scanline + bar_boost + noise;
 
-                            (rainbow::hsl_to_rgb(hue, saturation, lightness.clamp(25.0, 80.0)), None, None)
+                            (hsl_to_rgb(hue, saturation, lightness.clamp(25.0, 80.0)), None, None)
                         }
                         BannerAnimationStyle::Typewriter => {
                             // Gradual left-to-right, top-to-bottom reveal
@@ -780,7 +780,7 @@ impl RainbowBannerAnimation {
 
                             if hue_offset > total_duration {
                                 // Animation fully complete: all text revealed, no caret
-                                let color = rainbow::hsl_to_rgb(40.0, 20.0, 85.0);
+                                let color = hsl_to_rgb(40.0, 20.0, 85.0);
                                 (color, None, None)
                             } else {
                                 let progress = (hue_offset / typing_duration).clamp(0.0, 1.0);
@@ -789,27 +789,27 @@ impl RainbowBannerAnimation {
 
                                 if char_index < reveal_count {
                                     // Already revealed: warm white ink
-                                    let color = rainbow::hsl_to_rgb(40.0, 20.0, 85.0);
+                                    let color = hsl_to_rgb(40.0, 20.0, 85.0);
                                     (color, None, None)
                                 } else if char_index == reveal_count && reveal_count < total_chars {
                                     // Currently being typed: show with caret (only if not at end)
-                                    let color = rainbow::hsl_to_rgb(200.0, 85.0, 65.0);
+                                    let color = hsl_to_rgb(200.0, 85.0, 65.0);
                                     // Draw a block caret instead of the ASCII glyph to emphasize typing
                                     (color, None, Some('▌'))
                                 } else if reveal_count >= total_chars {
                                     // All characters revealed but still in settling time
-                                    let color = rainbow::hsl_to_rgb(40.0, 20.0, 85.0);
+                                    let color = hsl_to_rgb(40.0, 20.0, 85.0);
                                     (color, None, None)
                                 } else {
                                     // Not yet revealed: render as space (no ink)
-                                    let color = rainbow::hsl_to_rgb(0.0, 0.0, 0.0);
+                                    let color = hsl_to_rgb(0.0, 0.0, 0.0);
                                     (color, None, Some(' '))
                                 }
                             }
                         }
                         _ => {
                             // Fallback for unimplemented styles
-                            (rainbow::hsl_to_rgb(0.0, 0.0, 50.0), None, None)
+                            (hsl_to_rgb(0.0, 0.0, 50.0), None, None)
                         }
                     }
                 };
